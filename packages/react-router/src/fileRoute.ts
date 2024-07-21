@@ -20,13 +20,13 @@ import type {
   ResolveFullSearchSchemaInput,
   ResolveLoaderData,
   ResolveRouteContext,
-  ResolveSearchSchemaUsed,
+  ResolveSearchSchema,
+  ResolveSearchSchemaInput,
   Route,
   RouteConstraints,
   RouteContext,
   RouteLoaderFn,
-  SearchSchemaInput,
-  TrimPathLeft,
+  SearchValidator,
   UpdatableRouteOptions,
 } from './route'
 import type { Assign, IsAny } from './utils'
@@ -77,15 +77,12 @@ export class FileRoute<
   }
 
   createRoute = <
-    TSearchSchemaInput = Record<string, unknown>,
-    TSearchSchema = {},
-    TSearchSchemaUsed = ResolveSearchSchemaUsed<
-      TSearchSchemaInput,
-      TSearchSchema
-    >,
+    TSearchValidator extends SearchValidator = undefined,
+    TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+    TSearchSchema = ResolveSearchSchema<TSearchValidator>,
     TFullSearchSchemaInput = ResolveFullSearchSchemaInput<
       TParentRoute,
-      TSearchSchemaUsed
+      TSearchSchemaInput
     >,
     TFullSearchSchema = ResolveFullSearchSchema<TParentRoute, TSearchSchema>,
     TParams = Record<ParsePathParams<TPath>, string>,
@@ -100,8 +97,7 @@ export class FileRoute<
   >(
     options?: FileBaseRouteOptions<
       TPath,
-      TSearchSchemaInput,
-      TSearchSchema,
+      TSearchValidator,
       TFullSearchSchema,
       TParams,
       TAllParams,
@@ -126,9 +122,9 @@ export class FileRoute<
     TFullPath,
     TFilePath,
     TId,
+    TSearchValidator,
     TSearchSchemaInput,
     TSearchSchema,
-    TSearchSchemaUsed,
     TFullSearchSchemaInput,
     TFullSearchSchema,
     TParams,

@@ -1,6 +1,5 @@
 import { expectTypeOf, test } from 'vitest'
-import { Link, createRoute, createRouter } from '../src'
-import { createRootRoute } from '../src'
+import { Link, createRootRoute, createRoute, createRouter } from '../src'
 
 const rootRoute = createRootRoute({
   validateSearch: (): { rootPage?: number } => ({ rootPage: 0 }),
@@ -2974,6 +2973,8 @@ test('when navigating from the root to /posts', () => {
   expectTypeOf(RouterPreserveTrailingSlashesLink).not.toMatchTypeOf<{
     search: unknown
   }>()
+
+  type hi = (typeof postsIndexRoute)['types']['searchSchemaInput']
 
   expectTypeOf(DefaultRouterLink)
     .parameter(0)

@@ -54,9 +54,8 @@ export type RouteOptions<
   TParentRoute extends AnyRoute = AnyRoute,
   TCustomId extends string = string,
   TPath extends string = string,
-  TSearchSchemaInput = Record<string, unknown>,
-  TSearchSchema = {},
-  TFullSearchSchema = TSearchSchema,
+  TSearchValidator extends SearchValidator = undefined,
+  TFullSearchSchema = AnySearchSchema,
   TParams = AnyPathParams,
   TAllParams = TParams,
   TRouteContextReturn = RouteContext,
@@ -70,8 +69,7 @@ export type RouteOptions<
   TParentRoute,
   TCustomId,
   TPath,
-  TSearchSchemaInput,
-  TSearchSchema,
+  TSearchValidator,
   TFullSearchSchema,
   TParams,
   TAllParams,
@@ -124,9 +122,8 @@ export interface FullSearchSchemaOption<TFullSearchSchema> {
 
 export type FileBaseRouteOptions<
   TPath extends string = string,
-  TSearchSchemaInput = Record<string, unknown>,
-  TSearchSchema = {},
-  TFullSearchSchema = TSearchSchema,
+  TSearchValidator extends SearchValidator = undefined,
+  TFullSearchSchema = AnySearchSchema,
   TParams = {},
   TAllParams = {},
   TRouteContextReturn = RouteContext,
@@ -135,9 +132,7 @@ export type FileBaseRouteOptions<
   TLoaderDeps extends Record<string, any> = {},
   TLoaderDataReturn = {},
 > = {
-  validateSearch?:
-    | ((input: TSearchSchemaInput) => TSearchSchema)
-    | { parse: (input: TSearchSchemaInput) => TSearchSchema }
+  validateSearch?: TSearchValidator
   shouldReload?:
     | boolean
     | ((
@@ -160,9 +155,8 @@ export type BaseRouteOptions<
   TParentRoute extends AnyRoute = AnyRoute,
   TCustomId extends string = string,
   TPath extends string = string,
-  TSearchSchemaInput = Record<string, unknown>,
-  TSearchSchema = {},
-  TFullSearchSchema = TSearchSchema,
+  TSearchValidator extends SearchValidator = undefined,
+  TFullSearchSchema = AnySearchSchema,
   TParams = {},
   TAllParams = {},
   TRouteContextReturn = RouteContext,
@@ -173,8 +167,7 @@ export type BaseRouteOptions<
 > = RoutePathOptions<TCustomId, TPath> &
   FileBaseRouteOptions<
     TPath,
-    TSearchSchemaInput,
-    TSearchSchema,
+    TSearchValidator,
     TFullSearchSchema,
     TParams,
     TAllParams,
@@ -291,18 +284,16 @@ type LdJsonValue = LdJsonPrimitive | LdJsonObject | LdJsonArray
 
 export type RouteLinkEntry = {}
 
-// The parse type here allows a zod schema to be passed directly to the validator
-export type SearchSchemaValidator<TInput, TReturn> =
-  | SearchSchemaValidatorObj<TInput, TReturn>
-  | SearchSchemaValidatorFn<TInput, TReturn>
-
-export type SearchSchemaValidatorObj<TInput, TReturn> = {
-  parse?: SearchSchemaValidatorFn<TInput, TReturn>
+export interface ZodSearchValidator {
+  _input: any
+  _output: any
+  parse: (input: unknown) => any
 }
 
-export type SearchSchemaValidatorFn<TInput, TReturn> = (
-  searchObj: TInput,
-) => TReturn
+// The parse type here allows a zod schema to be passed directly to the validator
+export type SearchValidator = ZodSearchValidator | SearchValidatorFn | undefined
+
+export type SearchValidatorFn = (input: Record<string, unknown>) => any
 
 export type RouteLoaderFn<
   in out TAllParams = {},
@@ -375,10 +366,21 @@ export type InferAllContext<TRoute> = TRoute extends {
   ? TAllContext
   : {}
 
-export type ResolveSearchSchemaUsed<TSearchSchemaInput, TSearchSchema> =
-  TSearchSchemaInput extends SearchSchemaInput
-    ? Omit<TSearchSchemaInput, keyof SearchSchemaInput>
-    : TSearchSchema
+export type ResolveSearchSchemaInput<TSearchValidator extends SearchValidator> =
+  TSearchValidator extends ZodSearchValidator
+    ? TSearchValidator['_input']
+    : TSearchValidator extends (input: infer TSearchSchemaInput) => any
+      ? TSearchSchemaInput extends SearchSchemaInput
+        ? Omit<TSearchSchemaInput, keyof SearchSchemaInput>
+        : ResolveSearchSchema<TSearchValidator>
+      : AnySearchSchema
+
+export type ResolveSearchSchema<TSearchValidator extends SearchValidator> =
+  TSearchValidator extends ZodSearchValidator
+    ? TSearchValidator['_output']
+    : TSearchValidator extends (...args: any) => infer TSearchSchema
+      ? TSearchSchema
+      : AnySearchSchema
 
 export type ResolveFullSearchSchema<
   TParentRoute extends AnyRoute,
@@ -581,15 +583,12 @@ export class Route<
     TCustomId,
     TPath
   >,
-  in out TSearchSchemaInput = Record<string, unknown>,
-  in out TSearchSchema = {},
-  in out TSearchSchemaUsed = ResolveSearchSchemaUsed<
-    TSearchSchemaInput,
-    TSearchSchema
-  >,
+  in out TSearchValidator extends SearchValidator = undefined,
+  in out TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+  in out TSearchSchema = ResolveSearchSchema<TSearchValidator>,
   in out TFullSearchSchemaInput = ResolveFullSearchSchemaInput<
     TParentRoute,
-    TSearchSchemaUsed
+    TSearchSchemaInput
   >,
   in out TFullSearchSchema = ResolveFullSearchSchema<
     TParentRoute,
@@ -610,8 +609,7 @@ export class Route<
     TParentRoute,
     TCustomId,
     TPath,
-    TSearchSchemaInput,
-    TSearchSchema,
+    TSearchValidator,
     TFullSearchSchema,
     TParams,
     TAllParams,
@@ -648,8 +646,7 @@ export class Route<
       TParentRoute,
       TCustomId,
       TPath,
-      TSearchSchemaInput,
-      TSearchSchema,
+      TSearchValidator,
       TFullSearchSchema,
       TParams,
       TAllParams,
@@ -681,7 +678,6 @@ export class Route<
     id: TId
     searchSchema: TSearchSchema
     searchSchemaInput: TSearchSchemaInput
-    searchSchemaUsed: TSearchSchemaUsed
     fullSearchSchema: TFullSearchSchema
     fullSearchSchemaInput: TFullSearchSchemaInput
     params: TParams
@@ -701,8 +697,7 @@ export class Route<
           TParentRoute,
           TCustomId,
           TPath,
-          TSearchSchemaInput,
-          TSearchSchema,
+          TSearchValidator,
           TFullSearchSchema,
           TParams,
           TAllParams,
@@ -778,9 +773,9 @@ export class Route<
     TFullPath,
     TCustomId,
     TId,
+    TSearchValidator,
     TSearchSchemaInput,
     TSearchSchema,
-    TSearchSchemaUsed,
     TFullSearchSchemaInput,
     TFullSearchSchema,
     TParams,
@@ -809,9 +804,9 @@ export class Route<
       TFullPath,
       TCustomId,
       TId,
+      TSearchValidator,
       TSearchSchemaInput,
       TSearchSchema,
-      TSearchSchemaUsed,
       TFullSearchSchemaInput,
       TFullSearchSchema,
       TParams,
@@ -908,15 +903,12 @@ export function createRoute<
     TCustomId,
     TPath
   >,
-  TSearchSchemaInput = Record<string, unknown>,
-  TSearchSchema = {},
-  TSearchSchemaUsed = ResolveSearchSchemaUsed<
-    TSearchSchemaInput,
-    TSearchSchema
-  >,
+  TSearchValidator extends SearchValidator = undefined,
+  TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+  TSearchSchema = ResolveSearchSchema<TSearchValidator>,
   TFullSearchSchemaInput = ResolveFullSearchSchemaInput<
     TParentRoute,
-    TSearchSchemaUsed
+    TSearchSchemaInput
   >,
   TFullSearchSchema = ResolveFullSearchSchema<TParentRoute, TSearchSchema>,
   TParams = Record<ParsePathParams<TPath>, string>,
@@ -933,8 +925,7 @@ export function createRoute<
     TParentRoute,
     TCustomId,
     TPath,
-    TSearchSchemaInput,
-    TSearchSchema,
+    TSearchValidator,
     TFullSearchSchema,
     TParams,
     TAllParams,
@@ -953,9 +944,9 @@ export function createRoute<
     TFullPath,
     TCustomId,
     TId,
+    TSearchValidator,
     TSearchSchemaInput,
     TSearchSchema,
-    TSearchSchemaUsed,
     TFullSearchSchemaInput,
     TFullSearchSchema,
     TParams,
@@ -973,8 +964,7 @@ export function createRoute<
 export type AnyRootRoute = RootRoute<any, any, any, any, any, any, any, any>
 
 export type RootRouteOptions<
-  TSearchSchemaInput = {},
-  TSearchSchema = {},
+  TSearchValidator extends SearchValidator = undefined,
   TRouteContextReturn = RouteContext,
   TRouteContext = ResolveRouteContext<TRouteContextReturn>,
   TRouterContext = {},
@@ -986,9 +976,8 @@ export type RootRouteOptions<
     any, // TParentRoute
     RootRouteId, // TCustomId
     '', // TPath
-    TSearchSchemaInput, // TSearchSchemaInput
-    TSearchSchema, // TSearchSchema
-    TSearchSchema, // TFullSearchSchema
+    TSearchValidator,
+    ResolveSearchSchema<TSearchValidator>, // TFullSearchSchema
     {}, // TParams
     {}, // TAllParams
     TRouteContextReturn, // TRouteContextReturn
@@ -1010,12 +999,9 @@ export type RootRouteOptions<
 
 export function createRootRouteWithContext<TRouterContext extends {}>() {
   return <
-    TSearchSchemaInput = {},
-    TSearchSchema = {},
-    TSearchSchemaUsed = ResolveSearchSchemaUsed<
-      TSearchSchemaInput,
-      TSearchSchema
-    >,
+    TSearchValidator extends SearchValidator = undefined,
+    TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+    TSearchSchema = ResolveSearchSchema<TSearchValidator>,
     TRouteContextReturn extends RouteContext = RouteContext,
     TRouteContext extends
       RouteContext = ResolveRouteContext<TRouteContextReturn>,
@@ -1024,8 +1010,7 @@ export function createRootRouteWithContext<TRouterContext extends {}>() {
     TLoaderData = ResolveLoaderData<TLoaderDataReturn>,
   >(
     options?: RootRouteOptions<
-      TSearchSchemaInput,
-      TSearchSchema,
+      TSearchValidator,
       TRouteContextReturn,
       TRouteContext,
       TRouterContext,
@@ -1035,9 +1020,9 @@ export function createRootRouteWithContext<TRouterContext extends {}>() {
     >,
   ) => {
     return createRootRoute<
+      TSearchValidator,
       TSearchSchemaInput,
       TSearchSchema,
-      TSearchSchemaUsed,
       TRouteContextReturn,
       TRouteContext,
       TRouterContext,
@@ -1053,9 +1038,9 @@ export function createRootRouteWithContext<TRouterContext extends {}>() {
 export const rootRouteWithContext = createRootRouteWithContext
 
 export class RootRoute<
-  in out TSearchSchemaInput = {},
-  in out TSearchSchema = {},
-  in out TSearchSchemaUsed = {},
+  in out TSearchValidator extends SearchValidator = undefined,
+  in out TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+  in out TSearchSchema = ResolveSearchSchema<TSearchValidator>,
   TRouteContextReturn = RouteContext,
   in out TRouteContext = ResolveRouteContext<TRouteContextReturn>,
   in out TRouterContext = {},
@@ -1069,10 +1054,10 @@ export class RootRoute<
   '/', // TFullPath
   string, // TCustomId
   RootRouteId, // TId
+  TSearchValidator, // TSearchValidator
   TSearchSchemaInput, // TSearchSchemaInput
   TSearchSchema, // TSearchSchema
-  TSearchSchemaUsed,
-  TSearchSchemaUsed, // TFullSearchSchemaInput
+  TSearchSchemaInput, // TFullSearchSchemaInput
   TSearchSchema, // TFullSearchSchema
   {}, // TParams
   {}, // TAllParams
@@ -1089,8 +1074,7 @@ export class RootRoute<
    */
   constructor(
     options?: RootRouteOptions<
-      TSearchSchemaInput,
-      TSearchSchema,
+      TSearchValidator,
       TRouteContextReturn,
       TRouteContext,
       TRouterContext,
@@ -1109,9 +1093,9 @@ export class RootRoute<
   >(
     children: TNewChildren,
   ): RootRoute<
+    TSearchValidator,
     TSearchSchemaInput,
     TSearchSchema,
-    TSearchSchemaUsed,
     TRouteContextReturn,
     TRouteContext,
     TRouterContext,
@@ -1125,12 +1109,9 @@ export class RootRoute<
 }
 
 export function createRootRoute<
-  TSearchSchemaInput = {},
-  TSearchSchema = {},
-  TSearchSchemaUsed = ResolveSearchSchemaUsed<
-    TSearchSchemaInput,
-    TSearchSchema
-  >,
+  TSearchValidator extends SearchValidator = undefined,
+  TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+  TSearchSchema = ResolveSearchSchema<TSearchValidator>,
   TRouteContextReturn = RouteContext,
   TRouteContext = ResolveRouteContext<TRouteContextReturn>,
   TRouterContext = {},
@@ -1138,37 +1119,20 @@ export function createRootRoute<
   TLoaderDataReturn = {},
   TLoaderData = ResolveLoaderData<TLoaderDataReturn>,
 >(
-  options?: Omit<
-    RouteOptions<
-      any, // TParentRoute
-      RootRouteId, // TCustomId
-      '', // TPath
-      TSearchSchemaInput, // TSearchSchemaInput
-      TSearchSchema, // TSearchSchema
-      TSearchSchema,
-      {}, // TParams
-      {}, // TAllParams
-      TRouteContextReturn, // TRouteContextReturn
-      TRouteContext, // TRouteContext
-      TRouterContext,
-      Assign<TRouterContext, TRouteContext>, // TAllContext
-      TLoaderDeps,
-      TLoaderDataReturn,
-      TLoaderData
-    >,
-    | 'path'
-    | 'id'
-    | 'getParentRoute'
-    | 'caseSensitive'
-    | 'parseParams'
-    | 'stringifyParams'
-    | 'params'
+  options?: RootRouteOptions<
+    TSearchValidator,
+    TRouteContextReturn,
+    TRouteContext,
+    TRouterContext,
+    TLoaderDeps,
+    TLoaderDataReturn,
+    TLoaderData
   >,
 ) {
   return new RootRoute<
+    TSearchValidator,
     TSearchSchemaInput,
     TSearchSchema,
-    TSearchSchemaUsed,
     TRouteContextReturn,
     TRouteContext,
     TRouterContext,
@@ -1276,12 +1240,12 @@ export type NotFoundRouteComponent = SyncRouteComponent<NotFoundRouteProps>
 
 export class NotFoundRoute<
   TParentRoute extends AnyRootRoute,
-  TSearchSchemaInput = Record<string, unknown>,
-  TSearchSchema = {},
-  TSearchSchemaUsed = {},
+  TSearchValidator extends SearchValidator = undefined,
+  TSearchSchemaInput = ResolveSearchSchemaInput<TSearchValidator>,
+  TSearchSchema = ResolveSearchSchema<TSearchValidator>,
   TFullSearchSchemaInput = ResolveFullSearchSchemaInput<
     TParentRoute,
-    TSearchSchemaUsed
+    TSearchSchemaInput
   >,
   TFullSearchSchema = ResolveFullSearchSchema<TParentRoute, TSearchSchema>,
   TRouteContextReturn = AnyContext,
@@ -1297,9 +1261,9 @@ export class NotFoundRoute<
   '/404',
   '404',
   '404',
+  TSearchValidator,
   TSearchSchemaInput,
   TSearchSchema,
-  TSearchSchemaUsed,
   TFullSearchSchemaInput,
   TFullSearchSchema,
   {},
@@ -1318,8 +1282,7 @@ export class NotFoundRoute<
         TParentRoute,
         string,
         string,
-        TSearchSchemaInput,
-        TSearchSchema,
+        TSearchValidator,
         TFullSearchSchema,
         {},
         {},
